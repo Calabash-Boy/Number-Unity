@@ -4,7 +4,7 @@ Unity C# Demo
 # Unity UI
 
 ### Canvas 画布
-#####Render Mode  
+##### Render Mode  
 
 1. Overlay  
 全局覆盖，渲染在整个场景之上，自动随场景缩放   
@@ -16,7 +16,7 @@ Pixel Perfect 根据实际像素渲染，提高图像清晰
 
 
 ### Anchor 锚点
-#####四角锚点与中心锚点位置关系
+##### 四角锚点与中心锚点位置关系
 
 1. 锚点定位控件中心  
 控件随父层大小相对位置移动
