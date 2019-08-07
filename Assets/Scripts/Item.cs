@@ -6,36 +6,17 @@ using TMPro;
 public class Item : MonoBehaviour
 {
 
-    private int x;
-    private int y;
+    
     private int num;
     private Grid grid;
+    private Index gridIndex;
     private TextMeshProUGUI numText;
 
-
-    private Vector3 touchBeginPos;
-    private Vector3 touchLastPos;
     private bool isMovable;
 
-    public int X
-    {
-        get { return x;  }
-        set
-        {
-            x = value;
-            ChangeName();
-        }
-    }
+    private IEnumerator moveCoroutine;
 
-    public int Y
-    {
-        get { return y; }
-        set
-        {
-            y = value;
-            ChangeName();
-        }
-    }
+    public bool canMerge;
 
     //元素数字
     public int Num
@@ -54,8 +35,21 @@ public class Item : MonoBehaviour
         get { return grid; }
     }
 
+    public int X
+    {
+        get { return gridIndex.X; }
+        set { gridIndex.X = value; }
+    }
+
+    public int Y
+    {
+        get { return gridIndex.Y; }
+        set { gridIndex.Y = value; }
+    }
+
     private void Awake()
-    { 
+    {
+        gridIndex = GetComponent<Index>();
         Canvas canvas = transform.Find("Canvas").GetComponent<Canvas>();
         canvas.worldCamera = GameObject.FindGameObjectWithTag("MainCamera").GetComponent<Camera>();
 
@@ -63,6 +57,7 @@ public class Item : MonoBehaviour
         numText.transform.position = transform.position;
         
     }
+    
 
     // Start is called before the first frame update
     void Start()
@@ -79,13 +74,11 @@ public class Item : MonoBehaviour
 
     private void OnMouseDown()
     {
-        
-        grid.selectItem(this);
+
+        GridRef.SelectItem(this);
         isMovable = true;
-        touchLastPos = Input.mousePosition;
         GetComponent<SpriteRenderer>().sortingOrder = 99;
         transform.Find("Canvas").GetComponent<Canvas>().sortingOrder = 99;
-        //transform.position = Camera.main.ScreenToWorldPoint(touchLastPos);
     }
 
     private void OnMouseUp()
@@ -93,14 +86,14 @@ public class Item : MonoBehaviour
         isMovable = false;
         GetComponent<SpriteRenderer>().sortingOrder = 1;
         transform.Find("Canvas").GetComponent<Canvas>().sortingOrder = 1;
-        grid.releaseItem(this);
+        GridRef.ReleaseItem(this);
     }
 
     private void OnMouseDrag()
     {
         if (isMovable)
         {
-            grid.moveItem(this);
+            GridRef.DragItem(this);
             Vector3 newPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             newPos = new Vector2(Mathf.Clamp(newPos.x, (-grid.Width + grid.ItemWidth) / 2.0f, (grid.Width - grid.ItemWidth) / 2.0f),
                                  Mathf.Clamp(newPos.y, (-grid.Height + grid.ItemWidth) / 2.0f, (grid.Height - grid.ItemWidth) / 2.0f));
@@ -121,18 +114,46 @@ public class Item : MonoBehaviour
         GetComponent<SpriteRenderer>().color = new Color(r, g, b);
     }
 
-    private void ChangeName()
+    
+
+    private IEnumerator MoveCoroutine(int newX, int newY, float time)
     {
-        name = "Item(" + y + "," + x + ")";
+        gridIndex.X = newX;
+        gridIndex.Y = newY;
+        gridIndex.ChangeName();
+
+        Vector3 startPos = transform.position;
+        Vector3 endPos = GridRef.GetWorldPosition(newX, newY);
+        for (float t = 0; t <= 1 * time; t += Time.deltaTime)
+        {
+            transform.position = Vector3.Lerp(startPos, endPos, t / time);
+            yield return 0;
+        }
+        transform.position = endPos;
     }
     
     public void Init(int _x, int _y, Grid _grid, int _num)
     {
-        x = _x;
-        y = _y;
+        gridIndex.X = _x;
+        gridIndex.Y = _y;
         grid = _grid;
         Num = _num;
-        ChangeName();
+        gridIndex.ChangeName();
     }
 
+
+    public void Move(int newX, int newY, float time)
+    {
+        if(moveCoroutine != null)
+        {
+            StopCoroutine(moveCoroutine);
+        }
+        moveCoroutine = MoveCoroutine(newX, newY, time);
+        StartCoroutine(moveCoroutine);
+    }
+
+    public void ChangeName()
+    {
+        gridIndex.ChangeName();
+    }
 }
