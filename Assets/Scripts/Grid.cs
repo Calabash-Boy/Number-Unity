@@ -19,6 +19,7 @@ public class Grid : MonoBehaviour
     public int column;
     public int row;
     public float moveUpTime;
+
     public GameObject backgroundPrefab;
     public GameObject itemPrefab;
 
@@ -29,6 +30,7 @@ public class Grid : MonoBehaviour
     private GameController gameController;
     private bool isDragingItem;
     private bool isMovingItem;
+    private Item mergingItem;
 
     public float Width
     {
@@ -44,9 +46,21 @@ public class Grid : MonoBehaviour
         get { return itemWidth; }
     }
 
-    public bool IsMoving
+    public bool IsMovingItem
     {
-        get { return (isDragingItem || isMovingItem); }
+        get { return (isDragingItem || isMovingItem || isMergingItem); }
+    }
+
+    private bool isMergingItem
+    {
+        get
+        {
+            if (mergingItem != null)
+            {
+                return mergingItem.isMerging;
+            }
+            return false;
+        }
     }
     // Start is called before the first frame update
 
@@ -94,6 +108,7 @@ public class Grid : MonoBehaviour
                 back.GetComponent<Index>().X = col;
                 back.GetComponent<Index>().Y = r;
                 back.transform.parent = transform;
+                back.transform.localPosition = pos;
             }
         }
     }
@@ -112,7 +127,8 @@ public class Grid : MonoBehaviour
         }
         
         items = new Item[column, row];
-        GenerateNewLine();
+        //GenerateNewLine();
+        //GenerateNewLine();
     }
 
     public Vector2 GetWorldPosition(int _x, int _y)
@@ -129,9 +145,11 @@ public class Grid : MonoBehaviour
         {
             int randomNum = Random.Range(1, 5);
             while (items != null && items[i,row - 1] != null && randomNum == items[i, row - 1].Num) { randomNum = Random.Range(1, 5); }
-            Item item = Instantiate(itemPrefab, GetWorldPosition(i, row), Quaternion.identity).GetComponent<Item>();
+            Vector2 pos = GetWorldPosition(i, row);
+            Item item = Instantiate(itemPrefab, pos, Quaternion.identity).GetComponent<Item>();
             item.GetComponent<SpriteRenderer>().size = new Vector2(itemWidth, itemWidth);
             item.transform.parent = transform;
+            item.transform.localPosition = pos;
             item.Init(i, row, this, randomNum);
             newItems[i] = item;
         }
@@ -152,15 +170,28 @@ public class Grid : MonoBehaviour
                         gameController.GameOver();
                         return;
                     }
-                    item.Move(x, y - 1, moveUpTime);
+                    item.Move(x, y - 1, moveUpTime, false);
                     items[x, y - 1] = item;
                 }
                 if (y == row - 1)
                 {
-                    newItems[x].Move(x, y, moveUpTime);
+                    newItems[x].Move(x, y, moveUpTime, false);
                     items[x, y] = newItems[x];
                 }
             }
+        }
+    }
+
+    private void Fall(int preX, int preY, int newX)
+    {
+        StartCoroutine(MoveDown(newX));
+        if (preX != newX)
+        {
+            if (preY > 0 && items[preX, preY - 1] != null)
+            {
+                items[preX, preY - 1].canMerge = true;
+            }
+            StartCoroutine(MoveDown(preX));
         }
     }
 
@@ -171,29 +202,29 @@ public class Grid : MonoBehaviour
         {
             Item item = items[onX, y];
             Item itemBelow = items[onX, y + 1];
-            if (item != null)
+            if (item != null && !item.isMerging)
             {
                 if (itemBelow == null)
                 {
-                    item.Move(onX, y + 1, moveUpTime);
+                    item.Move(onX, y + 1, moveUpTime, false);
                     items[onX, y + 1] = item;
                     items[onX, y] = null;
                     isMoved = true;
                 }
-                else if(item.canMerge )
+                else if(itemBelow.isMerging)
                 {
-                    if(itemBelow.Num == item.Num)
+                    
+                }else if (item.canMerge)
+                {
+                    if(item.Num == itemBelow.Num)
                     {
                         Merge(item, itemBelow);
                         itemBelow.canMerge = true;
-                        isMoved = true;
                     }
                     else
                     {
                         item.canMerge = false;
                     }
-                    
-                    
                     
                 }
             }
@@ -201,11 +232,39 @@ public class Grid : MonoBehaviour
         return isMoved;
     }
 
+    //private bool MergeStep(int onX)
+    //{
+    //    //bool isMerged = false;
+    //    for (int y = 0; y < row - 1; y++)
+    //    {
+    //        Item item = items[onX, y];
+    //        Item itemBelow = items[onX, y + 1];
+    //        if (item != null && item.canMerge)
+    //        {
+    //            if (itemBelow != null && item.Num == itemBelow.Num)
+    //            {
+    //                Merge(item, itemBelow);
+    //                itemBelow.canMerge = true;
+    //                //isMerged = true;
+    //                return true;
+    //            }
+    //            else
+    //            {
+    //                item.canMerge = false;
+    //            }
+    //        }
+    //    }
+    //    return false;
+    //}
+
     private void Merge(Item item, Item toItem)
     {
+        gameController.Score++;
+        toItem.Merge();
+        mergingItem = toItem;
         toItem.Num++;
         items[item.X, item.Y] = null;
-        Destroy(item.gameObject);
+        item.Move(toItem.X, toItem.Y, moveUpTime, true);
     }
 
     public void SelectItem(Item item)
@@ -228,11 +287,7 @@ public class Grid : MonoBehaviour
             item.X = backIndex.X;
             item.Y = backIndex.Y;
             item.ChangeName();
-            StartCoroutine(MoveDown(item.X));
-            if (x != item.X && y > 0)
-            {
-                StartCoroutine(MoveDown(x));
-            }
+            Fall(x, y, backIndex.X);
         }
         isDragingItem = false;
     }
@@ -252,13 +307,10 @@ public class Grid : MonoBehaviour
                     {
                         int x = item.X;
                         int y = item.Y;
+                        
                         Merge(item, onItem);
                         onItem.canMerge = true;
-                        StartCoroutine(MoveDown(onItem.X));
-                        if (x != onItem.X && y > 0)
-                        {
-                            StartCoroutine(MoveDown(x));
-                        }
+                        Fall(x, y, onItem.X);
                         isDragingItem = false;
                     }
                     else
@@ -285,8 +337,21 @@ public class Grid : MonoBehaviour
     //从该位置向下落 以上item不管n
     public IEnumerator MoveDown(int onX)
     {
-        while (MoveDownStep(onX)){
-            isMovingItem = true;
+        //bool waitMerge = true;
+        //while (waitMerge)
+        //{
+        //    isMovingItem = true;
+        //    yield return new WaitForSeconds(moveUpTime);
+        //    while (MoveDownStep(onX))
+        //    {
+        //        yield return new WaitForSeconds(moveUpTime);
+        //    }
+        //    waitMerge = MergeStep(onX);
+        //}
+        //isMovingItem = false;
+        isMovingItem = true;
+        while (MoveDownStep(onX))
+        {
             yield return new WaitForSeconds(moveUpTime);
         }
         isMovingItem = false;

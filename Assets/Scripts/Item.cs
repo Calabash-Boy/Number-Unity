@@ -11,12 +11,16 @@ public class Item : MonoBehaviour
     private Grid grid;
     private Index gridIndex;
     private TextMeshProUGUI numText;
+    private Canvas canvas;
+    private SpriteRenderer renderer;
 
     private bool isMovable;
 
     private IEnumerator moveCoroutine;
 
-    public bool canMerge;
+    [System.NonSerialized] public bool canMerge;
+    [System.NonSerialized] public bool isMerging;
+    public AnimationClip mergeAnimation;
 
     //元素数字
     public int Num
@@ -50,12 +54,12 @@ public class Item : MonoBehaviour
     private void Awake()
     {
         gridIndex = GetComponent<Index>();
-        Canvas canvas = transform.Find("Canvas").GetComponent<Canvas>();
-        canvas.worldCamera = GameObject.FindGameObjectWithTag("MainCamera").GetComponent<Camera>();
+        canvas = transform.Find("Canvas").GetComponent<Canvas>();
+        canvas.worldCamera = Camera.main;
 
         numText = canvas.transform.Find("NumText").GetComponent<TextMeshProUGUI>();
         numText.transform.position = transform.position;
-        
+        renderer = GetComponent<SpriteRenderer>();
     }
     
 
@@ -77,21 +81,21 @@ public class Item : MonoBehaviour
 
         GridRef.SelectItem(this);
         isMovable = true;
-        GetComponent<SpriteRenderer>().sortingOrder = 99;
-        transform.Find("Canvas").GetComponent<Canvas>().sortingOrder = 99;
+        renderer.sortingOrder = 99;
+        canvas.sortingOrder = 99;
     }
 
     private void OnMouseUp()
     {
         isMovable = false;
-        GetComponent<SpriteRenderer>().sortingOrder = 1;
-        transform.Find("Canvas").GetComponent<Canvas>().sortingOrder = 1;
+        renderer.sortingOrder = 1;
+        canvas.sortingOrder = 1;
         GridRef.ReleaseItem(this);
     }
 
     private void OnMouseDrag()
     {
-        if (isMovable)
+        if (isMovable && !isMerging)
         {
             GridRef.DragItem(this);
             Vector3 newPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -116,20 +120,37 @@ public class Item : MonoBehaviour
 
     
 
-    private IEnumerator MoveCoroutine(int newX, int newY, float time)
+    private IEnumerator MoveCoroutine(int newX, int newY, float time, bool merge)
     {
         gridIndex.X = newX;
         gridIndex.Y = newY;
         gridIndex.ChangeName();
 
-        Vector3 startPos = transform.position;
+        Vector3 startPos = transform.localPosition;
         Vector3 endPos = GridRef.GetWorldPosition(newX, newY);
         for (float t = 0; t <= 1 * time; t += Time.deltaTime)
         {
-            transform.position = Vector3.Lerp(startPos, endPos, t / time);
+            transform.localPosition = Vector3.Lerp(startPos, endPos, t / time);
             yield return 0;
         }
-        transform.position = endPos;
+        transform.localPosition = endPos;
+        if (merge)
+        {
+            Destroy(transform.gameObject);
+        }
+    }
+
+    private IEnumerator MergeCoroutine()
+    {
+        isMerging = true;
+        Animator animator = GetComponent<Animator>();
+        if (animator)
+        {
+            animator.Play(mergeAnimation.name);
+            yield return new WaitForSeconds(mergeAnimation.length);
+            isMerging = false;
+        }
+        isMerging = false;
     }
     
     public void Init(int _x, int _y, Grid _grid, int _num)
@@ -142,18 +163,29 @@ public class Item : MonoBehaviour
     }
 
 
-    public void Move(int newX, int newY, float time)
+    public void Move(int newX, int newY, float time, bool merge)
     {
-        if(moveCoroutine != null)
+        if (merge)
+        {
+            isMerging = true;
+            renderer.sortingOrder = 1;
+            canvas.sortingOrder = 1;
+        }
+        if (moveCoroutine != null)
         {
             StopCoroutine(moveCoroutine);
         }
-        moveCoroutine = MoveCoroutine(newX, newY, time);
+        moveCoroutine = MoveCoroutine(newX, newY, time, merge);
         StartCoroutine(moveCoroutine);
     }
 
     public void ChangeName()
     {
         gridIndex.ChangeName();
+    }
+
+    public void Merge()
+    {
+        StartCoroutine(MergeCoroutine());
     }
 }

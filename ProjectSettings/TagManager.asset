@@ -50,3 +50,9 @@ TagManager:
   - name: Item
     uniqueID: 3018711923
     locked: 0
+  - name: New Layer
+    uniqueID: 3854616375
+    locked: 0
+  - name: Front UI
+    uniqueID: 1567533531
+    locked: 0
